@@ -31,7 +31,7 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -yq gettext libncurses5-dev rsync xsltproc wget file
+          sudo apt-get install -yq gettext libncurses5-dev rsync xsltproc wget file zstd
 
       - name: Create Directories
         run: |
@@ -54,7 +54,8 @@ jobs:
             echo "SDK cannot be verified!"
             exit 1
           fi
-          tar -Jxf "$SDK_DL_DIR/$SDK_FILE" -C "$SDK_HOME" --strip=1 || { echo "Failed to extract SDK"; exit 1; }
+          unzstd "$SDK_DL_DIR/$SDK_FILE" -o "${SDK_FILE%.zst}.tar"
+          tar -xf "${SDK_FILE%.zst}.tar" -C "$SDK_HOME" --strip=1 || { echo "Failed to extract SDK"; exit 1; }
 
       - name: Build Packages
         run: |
