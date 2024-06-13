@@ -57,6 +57,10 @@ jobs:
           unzstd "$SDK_DL_DIR/$SDK_FILE" -o "${SDK_FILE%.zst}.tar"
           tar -xf "${SDK_FILE%.zst}.tar" -C "$SDK_HOME" --strip=1 || { echo "Failed to extract SDK"; exit 1; }
 
+      - name: Create Release Tag
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        run: git tag ${{ github.ref }}
+      
       - name: Build Packages
         run: |
           source $GITHUB_ENV
@@ -70,8 +74,15 @@ jobs:
            -exec cp -f {} "${GITHUB_WORKSPACE}" \;
 
       - name: Release and Upload Assets
+        if: github.event_name == 'push' && github.ref_type == 'tag'
         uses: softprops/action-gh-release@v1
         with:
+          tag_name: ${{ github.ref }}
           files: "*.ipk"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Clean up
+        run: |
+          rm -rf "$SDK_HOME"
+          rm -rf "$SDK_DL_DIR"
