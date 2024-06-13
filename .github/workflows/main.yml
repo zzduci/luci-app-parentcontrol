@@ -1,7 +1,6 @@
-name: build
+name: Build and Release
 
 on:
-  workflow_dispatch: # 允许手动触发工作流
   push:
     tags:
       - "*"
@@ -27,52 +26,46 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
-      
-      - name: 安装依赖
+
+      - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -yq gettext libncurses5-dev rsync xsltproc
-          
-      - name: 创建目录
+          sudo apt-get install -yq gettext libncurses5-dev rsync xsltproc wget
+
+      - name: Create Directories
         run: |
           echo "SDK_HOME=$(mktemp -d)" >> $GITHUB_ENV
           echo "SDK_DL_DIR=$(mktemp -d)" >> $GITHUB_ENV
-          
-      - name: 准备构建环境
+
+      - name: Prepare Build Environment
         run: |
           cd "$SDK_DL_DIR"
           if ! ( wget -q -O - "$SDK_URL_PATH/sha256sums" | grep -- "$SDK_NAME" > sha256sums.small 2>/dev/null ) ; then
-            echo "在sha256sums中找不到${SDK_NAME}文件。"
+            echo "Cannot find ${SDK_NAME} file in sha256sums."
             exit 1
           fi
-          SDK_FILE="$(cat sha256sums.small | cut -d' ' -f2 | sed 's/*//g')"
-          wget -q -O "$SDK_FILE" "$SDK_URL_PATH/$SDK_FILE"
-          if ! sha256sum -c ./sha256sums.small >/dev/null 2>&1 ; then
-            echo "SDK无法验证！"
+          SDK_FILE="$(awk '{print $2}' sha256sums.small | sed 's/*//g')"
+          wget -q -O "$SDK_DL_DIR/$SDK_FILE" "$SDK_URL_PATH/$SDK_FILE"
+          if ! sha256sum -c sha256sums.small >/dev/null 2>&1 ; then
+            echo "SDK cannot be verified!"
             exit 1
           fi
           tar -Jxf "$SDK_DL_DIR/$SDK_FILE" -C "$SDK_HOME" --strip=1
-          
-      - name: 更新Feeds
-        run: |
-          cd "$SDK_HOME"
-          ./scripts/feeds update -a
-          ./scripts/feeds install -a
 
-      - name: 构建软件包
+      - name: Build Packages
         run: |
           cd "$SDK_HOME"
-          ./scripts/feeds install golang
-          ln -s "${{ github.workspace }}" "package/$PACKAGE_NAME"
-          make defconfig
-          make package/${PACKAGE_NAME}/clean
-          make package/${PACKAGE_NAME}/compile -j1 V=s
+          ./scripts/feeds update -a > /dev/null 2>&1
+          ./scripts/feeds install -a > /dev/null 2>&1
+          cp -r "${GITHUB_WORKSPACE}" "package/$PACKAGE_NAME"
+          make defconfig > /dev/null 2>&1
+          make package/${PACKAGE_NAME}/{clean,download,compile} V=s
           find "$SDK_HOME/bin" -type f -name "${PACKAGE_NAME}_*.ipk" \
-           -exec cp -f {} "${{ github.workspace }}" \;
+           -exec cp -f {} "${GITHUB_WORKSPACE}" \;
 
-      - name: 发布和上传资产
+      - name: Release and Upload Assets
         uses: softprops/action-gh-release@v1
         with:
           files: "*.ipk"
         env:
-          GITHUB_TOKEN: ${{ secrets.REPO_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
